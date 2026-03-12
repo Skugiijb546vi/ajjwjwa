@@ -1,0 +1,61 @@
+name: Telegram_Audio_Ninja
+
+on:
+  workflow_dispatch:
+    inputs:
+      tg_post_url:
+        description: 'بەستەری پۆستە گشتییەکەی تێلیگرام (نموونە: https://t.me/sebar_test/2)'
+        required: true
+      audio_name:
+        description: 'ناوی فایلەکە (بە mp3. کۆتایی بێت)'
+        required: true
+        default: 'telegram_audio.mp3'
+
+jobs:
+  extract_audio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗️ ئامادەکردنی سێرڤەر
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg -qq
+          pip install -U yt-dlp huggingface_hub
+
+      - name: 🎵 ڕاکێشان و جیاکردنەوەی دەنگ لە تێلیگرامەوە
+        run: |
+          echo "خەریکی ڕاکێشانی ڤیدیۆکەم لە تێلیگرامەوە و دەرهێنانی دەنگەکەی..."
+          # ئەم ئامرازە ڕاستەوخۆ ڤیدیۆکەی تێلیگرام دادەگرێت و تەنها دەنگەکەی دەهێڵێتەوە
+          yt-dlp --extract-audio --audio-format mp3 --audio-quality 0 -o "extracted_audio.%(ext)s" "${{ github.event.inputs.tg_post_url }}"
+          echo "✅ دەنگەکە بە سەرکەوتوویی دەرکێشرا!"
+
+      - name: 🚀 ناردن بۆ کۆگا شاراوەکە
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python3 -c "
+          import os
+          from huggingface_hub import HfApi
+          
+          api = HfApi()
+          repo_id = 'Sarko761/ai-training-data'
+          token = os.environ.get('HF_TOKEN')
+          file_name = '${{ github.event.inputs.audio_name }}'
+          
+          if not file_name.endswith('.mp3'):
+              file_name += '.mp3'
+          
+          print(f'ناردنی فایلە دەنگییەکە بە ناوی: {file_name}')
+          
+          if os.path.exists('extracted_audio.mp3'):
+              api.upload_file(
+                  path_or_fileobj='extracted_audio.mp3',
+                  path_in_repo=file_name,
+                  repo_id=repo_id,
+                  repo_type='dataset',
+                  token=token
+              )
+              print('✅ بە سەرکەوتوویی نێردرا!')
+          else:
+              print('❌ کێشەیەک هەیە، دەنگەکە دەرنەهێنراوە.')
+              exit(1)
+          "
